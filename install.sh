@@ -17,6 +17,7 @@ for c in jq sqlite3; do
   command -v "$c" >/dev/null 2>&1 || { echo "Il manque $c (brew install $c)." >&2; exit 1; }
 done
 command -v caffeinate >/dev/null 2>&1 || echo "Attention : caffeinate introuvable (macOS uniquement)."
+command -v python3 >/dev/null 2>&1 || echo "Attention : python3 introuvable, la barre de menus sera en texte au lieu des batteries."
 
 chmod +x "$ROOT/install.sh" "$ROOT/uninstall.sh" "$ROOT/statusline.sh" \
   "$ROOT/hooks/awake.sh" "$ROOT/swiftbar/claude-watch.5s.sh" "$ROOT/bin/claude-watch"

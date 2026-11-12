@@ -20,3 +20,16 @@
 
 # Écart, en points, entre % consommé et % de fenêtre écoulé avant d'afficher ▲ ou ▼.
 #CLAUDE_WATCH_PACE_MARGIN=10
+
+# Couleurs dans la status line (0 pour les désactiver).
+#CLAUDE_WATCH_COLOR=1
+
+# Barre de menus : "battery" (icône avec deux batteries) ou "text".
+#CLAUDE_WATCH_BAR_STYLE=battery
+
+# Pourcentage de quota restant sous lequel une batterie passe au rouge.
+#CLAUDE_WATCH_LOW=20
+
+# Thème de l'icône quand une batterie est rouge : auto, light ou dark.
+# À forcer si le texte de ta barre de menus est clair alors que macOS est en mode clair.
+#CLAUDE_WATCH_BAR_THEME=auto

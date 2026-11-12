@@ -13,6 +13,7 @@ export CLAUDE_WATCH_STATE_DIR="$T/state"
 export CLAUDE_WATCH_NOTIFY_CMD="$T/bin/notify"
 export CLAUDE_WATCH_LOG_INTERVAL=0
 export CLAUDE_WATCH_NOTIFY_AFTER=1
+export CLAUDE_WATCH_COLOR=0
 mkdir -p "$HOME/.claude" "$T/bin"
 
 # Faux caffeinate : reste vivant sous le nom "caffeinate".
@@ -42,7 +43,7 @@ now=$(date +%s)
 hook_json() { printf '{"session_id":"%s","cwd":"/Users/f/dev/%s"}' "$1" "$2"; }
 status_json() { # <sid> <projet> <coût> <5h %> <7j %> [modèle]
   printf '{"session_id":"%s","cwd":"/Users/f/dev/%s","workspace":{"project_dir":"/Users/f/dev/%s"},
-    "model":{"display_name":"%s"},"cost":{"total_cost_usd":%s},
+    "model":{"display_name":"%s"},"cost":{"total_cost_usd":%s},"context_window":{"used_percentage":42.6},
     "rate_limits":{"five_hour":{"used_percentage":%s,"resets_at":%s},
                    "seven_day":{"used_percentage":%s,"resets_at":%s}}}' \
     "$1" "$2" "$2" "${6:-Opus}" "$3" "$4" $((now + 9000)) "$5" $((now + 302400))
@@ -68,10 +69,18 @@ rm -f "$T/state/awake-fantome.pid"
 
 echo "Status line"
 line=$(status_json s2 beta 0.50 34.7 61.2 | "$ROOT/statusline.sh")
-assert "session active affichée ☕" 'contains "$line" "☕"'
+assert "session active : point plein" 'contains "$line" "●"'
 assert "pourcentages affichés" 'contains "$line" "5h 34%" && contains "$line" "7j 61%"'
+assert "projet, modèle et contexte affichés" 'contains "$line" "beta  Opus  ctx 42%"'
 line=$(status_json s1 alpha 1.00 35 61 | "$ROOT/statusline.sh")
-assert "session inactive affichée 💤" 'contains "$line" "💤"'
+assert "session inactive : cercle vide" 'contains "$line" "○"'
+mkdir -p "$T/repo" && git -C "$T/repo" init -q -b ma-branche 2>/dev/null
+line=$(printf '{"session_id":"s5","cwd":"%s","model":{"display_name":"Opus"},"rate_limits":{"five_hour":{"used_percentage":85,"resets_at":%s},"seven_day":{"used_percentage":10,"resets_at":%s}}}' "$T/repo" $((now + 5940)) $((now + 302400)) | "$ROOT/statusline.sh")
+assert "branche git affichée" 'contains "$line" "repo  ma-branche  Opus"'
+assert "reset affiché à partir de 80 %" 'contains "$line" "5h 85%▲ ↻1h39" || contains "$line" "5h 85%▲ ↻1h38"'
+assert "pas de reset sous 80 %" '! contains "$line" "7j 10% ↻"'
+colored=$(status_json s6 delta 0.10 35 61 | CLAUDE_WATCH_COLOR=1 "$ROOT/statusline.sh")
+assert "couleurs ANSI activées par défaut" 'contains "$colored" "$(printf "\\033[32m")35%"'
 assert "fichier quota écrit" '[ "$(cut -d" " -f2,4 "$T/state/quota")" = "35 61" ]'
 line=$(printf '{"session_id":"s3","cwd":"/tmp/x","cost":{"total_cost_usd":0.1}}' | "$ROOT/statusline.sh")
 assert "sans rate_limits : message dédié" 'contains "$line" "quotas indisponibles"'
@@ -114,14 +123,32 @@ assert "de la marge" '[ "$(pace 20 $((now + 9000)) 18000 $now)" = "50 40 slow" ]
 assert "pas de projection en début de fenêtre" '[ "$(pace 4 $((now + 17500)) 18000 $now)" = "3 -1 ok" ]'
 
 echo "Plugin SwiftBar"
+# À ce stade : 96 % du quota 5 h consommés (reste 4 %, rouge), 63 % du quota 7 j.
 menu=$("$ROOT/swiftbar/claude-watch.5s.sh")
-assert "titre avec quotas" 'contains "$(echo "$menu" | head -1)" "96%"'
-assert "couleur rouge au-delà de 95 %" 'contains "$(echo "$menu" | head -1)" "color=red"'
-assert "détail des fenêtres" 'contains "$menu" "Session 5 h : 96 %" && contains "$menu" "Semaine : 63 %"'
+title=$(echo "$menu" | head -1)
+assert "titre : image en couleurs quand une batterie est rouge" 'contains "$title" " | image=iVBORw0KGgo"'
+assert "titre : taille en points" 'contains "$title" " width=" && contains "$title" " height=16"'
+assert "image mise en cache" '[ "$(sed -n 1p "$T/state/bar.cache")" = "v2 0 4 37 light 20" ]'
+assert "thème sombre suivi" 'contains "$(OS_APPEARANCE=Dark "$ROOT/swiftbar/claude-watch.5s.sh" | head -1)" "image=" && [ "$(sed -n 1p "$T/state/bar.cache")" = "v2 0 4 37 dark 20" ]'
+assert "jauges alignées" 'contains "$menu" "5 h  ▰▰▰▰▰▰▰▰▰▰   96 % utilisés" && contains "$menu" "7 j  ▰▰▰▰▰▰▱▱▱▱   63 % utilisés"'
+assert "jauge : arrondi et bornes" '[ "$(gauge 0)" = "▱▱▱▱▱▱▱▱▱▱" ] && [ "$(gauge 3)" = "▰▱▱▱▱▱▱▱▱▱" ] && [ "$(gauge 34)" = "▰▰▰▱▱▱▱▱▱▱" ] && [ "$(gauge 100)" = "▰▰▰▰▰▰▰▰▰▰" ]'
 assert "top projets" 'contains "$menu" "-- alpha : "'
+assert "lignes d'information cliquables (non grisées)" 'contains "$menu" "veille normale | refresh=true"'
 printf '%s 50 %s 70 %s\n' $((now - 20000)) $((now - 100)) $((now + 300000)) > "$T/state/quota"
 menu=$("$ROOT/swiftbar/claude-watch.5s.sh")
-assert "fenêtre 5 h expirée remise à zéro" 'contains "$(echo "$menu" | head -1)" " 0%" && contains "$menu" "fenêtre réinitialisée"'
+assert "fenêtre 5 h expirée : batterie pleine" '[ "$(sed -n 1p "$T/state/bar.cache")" = "v2 0 100 30 template 20" ] && contains "$menu" "fenêtre réinitialisée"'
+assert "titre : image template sans rouge" 'contains "$(echo "$menu" | head -1)" " | templateImage=iVBORw0KGgo"'
+assert "titre en texte sur demande" '[ "$(CLAUDE_WATCH_BAR_STYLE=text "$ROOT/swiftbar/claude-watch.5s.sh" | head -1)" = "0  5H 100%  7J 30%" ]'
+rm -f "$T/state/quota"
+assert "sans mesure : batteries vides" '[ "$(CLAUDE_WATCH_BAR_STYLE=text "$ROOT/swiftbar/claude-watch.5s.sh" | head -1)" = "0  5H -  7J -" ]'
+
+echo "Rendu de l'icône"
+png="$T/icone.png"
+"$ROOT/lib/render_bar.py" 2 66 39 dark | cut -d" " -f3 | base64 -d > "$png" 2>/dev/null
+assert "PNG valide" '[ "$(head -c 8 "$png" | od -An -c | tr -d " ")" = "211PNG\\r\\n032\\n" ]'
+assert "dimensions annoncées" '[ "$("$ROOT/lib/render_bar.py" 2 66 39 dark | cut -d" " -f1,2)" = "121 16" ]'
+assert "largeur adaptée au contenu" '[ "$("$ROOT/lib/render_bar.py" 12 100 100 template | cut -d" " -f1)" -gt 121 ]'
+assert "arguments invalides refusés" '! "$ROOT/lib/render_bar.py" 2 66 39 rose >/dev/null 2>&1'
 
 echo "Installation"
 cat > "$HOME/.claude/settings.json" <<'EOF'

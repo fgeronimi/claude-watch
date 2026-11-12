@@ -59,18 +59,18 @@ cmd_status() {
 
   show() { # <libellé> <pct> <resets_at> <durée>
     if [ "$3" -le "$ts" ]; then
-      echo "$1 : fenêtre réinitialisée, pas encore de nouvelle mesure"
+      echo "$1  fenêtre réinitialisée, pas encore de nouvelle mesure"
       return
     fi
     read -r elapsed proj state <<<"$(pace "$2" "$3" "$4" "$ts")"
-    printf '%s : %s %% %s — reset %s (dans %s)\n' "$1" "$2" "$(pace_icon "$state")" \
-      "$(fmt_epoch "$3" '%a %H:%M')" "$(human_duration $(($3 - ts)))"
-    printf '    %s %% de la fenêtre écoulé' "$elapsed"
+    printf '%s  %s  %3s %% utilisés %s  reset dans %s (%s)\n' "$1" "$(gauge "$2")" "$2" "$(pace_icon "$state")" \
+      "$(human_duration $(($3 - ts)))" "$(fmt_epoch "$3" '%a %H:%M')"
+    printf '     %s %% de la fenêtre écoulé' "$elapsed"
     [ "$proj" -ge 0 ] && printf ', projection au reset : %s %%' "$proj"
     printf '\n'
   }
-  show "Session 5 h" "$five" "$five_reset" "$FIVE_LEN"
-  show "Semaine    " "$seven" "$seven_reset" "$SEVEN_LEN"
+  show "5 h" "$five" "$five_reset" "$FIVE_LEN"
+  show "7 j" "$seven" "$seven_reset" "$SEVEN_LEN"
   echo "Mesure d'il y a $(human_duration $((ts - q_ts)))"
 }
 
@@ -117,7 +117,7 @@ cmd_doctor() {
     if "$@" >/dev/null 2>&1; then echo "  ok   $label"; else echo "  KO   $label"; ok=1; fi
   }
   echo "Dépendances"
-  for c in jq sqlite3 caffeinate osascript; do check "$c" command -v "$c"; done
+  for c in jq sqlite3 python3 caffeinate osascript; do check "$c" command -v "$c"; done
   echo "Installation"
   check "lien ~/.claude/claude-watch" test -e "$HOME/.claude/claude-watch/statusline.sh"
   check "hooks dans settings.json" grep -q 'claude-watch/hooks/awake.sh' "$settings"

@@ -18,6 +18,10 @@ DB="$STATE_DIR/history.db"
 : "${CLAUDE_WATCH_NOTIFY_AFTER:=300}"       # notifier la fin d'un tour plus long que N s (0 = jamais)
 : "${CLAUDE_WATCH_LOG_INTERVAL:=30}"        # intervalle mini entre deux mesures par session
 : "${CLAUDE_WATCH_PACE_MARGIN:=10}"         # écart (en points) avant d'afficher ▲ ou ▼
+: "${CLAUDE_WATCH_COLOR:=1}"                # couleurs dans la status line (0 = sans)
+: "${CLAUDE_WATCH_BAR_STYLE:=battery}"      # barre de menus : battery (icône) ou text
+: "${CLAUDE_WATCH_BAR_THEME:=auto}"         # auto, light ou dark (utilisé quand une batterie est rouge)
+: "${CLAUDE_WATCH_LOW:=20}"                 # % restant sous lequel une batterie passe au rouge
 
 FIVE_LEN=18000     # fenêtre de 5 h
 SEVEN_LEN=604800   # fenêtre de 7 jours
@@ -36,6 +40,32 @@ human_duration() {
   elif [ "$s" -lt 86400 ]; then printf '%d h %02d\n' $((s / 3600)) $((s % 3600 / 60))
   else echo "$((s / 86400)) j $((s % 86400 / 3600)) h"
   fi
+}
+
+# short_duration <secondes> → "12min", "1h39", "3j" (forme compacte pour la status line)
+short_duration() {
+  local s=$1
+  [ "$s" -lt 0 ] && s=0
+  if [ "$s" -lt 3600 ]; then echo "$((s / 60))min"
+  elif [ "$s" -lt 86400 ]; then printf '%dh%02d\n' $((s / 3600)) $((s % 3600 / 60))
+  else echo "$((s / 86400))j"
+  fi
+}
+
+# gauge <pct> [largeur] → ▰▰▰▱▱▱▱▱▱▱
+gauge() {
+  local pct=$1 width=${2:-10} filled i out=""
+  filled=$(( (pct * width + 50) / 100 ))
+  [ "$filled" -gt "$width" ] && filled=$width
+  [ "$filled" -lt 0 ] && filled=0
+  # Un quota entamé n'affiche jamais une jauge vide.
+  [ "$pct" -gt 0 ] && [ "$filled" -eq 0 ] && filled=1
+  i=0
+  while [ "$i" -lt "$width" ]; do
+    if [ "$i" -lt "$filled" ]; then out="$out▰"; else out="$out▱"; fi
+    i=$((i + 1))
+  done
+  echo "$out"
 }
 
 # Échappe une valeur pour un littéral SQL entre apostrophes.
