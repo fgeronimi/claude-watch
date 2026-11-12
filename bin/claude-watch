@@ -1,0 +1,145 @@
+#!/bin/bash
+# CLI de claude-watch : état courant, historique et rapports de consommation.
+
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+done
+ROOT="$(cd -P "$(dirname "$src")/.." && pwd)"
+# shellcheck source=../lib/common.sh
+. "$ROOT/lib/common.sh"
+
+usage() {
+  cat <<EOF
+usage : claude-watch <commande>
+
+  status            agents actifs, quotas et rythme de consommation
+  history [jours]   une ligne par jour (14 jours par défaut)
+  report [jours]    coût par projet et par modèle (7 jours par défaut)
+  doctor            vérifie les dépendances et l'installation
+  paths             affiche les chemins utilisés
+EOF
+}
+
+query() { sqlite3 -cmd ".timeout 3000" -header -column "$DB" "$1"; }
+
+need_db() {
+  flush_pending
+  [ -f "$DB" ] || { echo "Pas encore d'historique."; exit 0; }
+}
+
+days_arg() {
+  case "${1:-}" in
+    '') echo "$2" ;;
+    *[!0-9]*) echo "nombre de jours invalide : $1" >&2; exit 1 ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# Dernier composant du chemin du projet, en SQL.
+PROJECT_NAME="COALESCE(NULLIF(replace(project, rtrim(project, replace(project, '/', '')), ''), ''), '?')"
+
+cmd_status() {
+  local ts active q_ts five five_reset seven seven_reset elapsed proj state
+  ts=$(now)
+  active=$(active_count)
+  if [ "$active" -gt 0 ]; then
+    echo "☕ $active agent(s) en cours, veille bloquée"
+  else
+    echo "💤 Aucun agent actif, veille normale"
+  fi
+
+  if [ ! -f "$STATE_DIR/quota" ]; then
+    echo "Pas encore de données de quota."
+    return
+  fi
+  read -r q_ts five five_reset seven seven_reset < "$STATE_DIR/quota"
+
+  show() { # <libellé> <pct> <resets_at> <durée>
+    if [ "$3" -le "$ts" ]; then
+      echo "$1 : fenêtre réinitialisée, pas encore de nouvelle mesure"
+      return
+    fi
+    read -r elapsed proj state <<<"$(pace "$2" "$3" "$4" "$ts")"
+    printf '%s : %s %% %s — reset %s (dans %s)\n' "$1" "$2" "$(pace_icon "$state")" \
+      "$(fmt_epoch "$3" '%a %H:%M')" "$(human_duration $(($3 - ts)))"
+    printf '    %s %% de la fenêtre écoulé' "$elapsed"
+    [ "$proj" -ge 0 ] && printf ', projection au reset : %s %%' "$proj"
+    printf '\n'
+  }
+  show "Session 5 h" "$five" "$five_reset" "$FIVE_LEN"
+  show "Semaine    " "$seven" "$seven_reset" "$SEVEN_LEN"
+  echo "Mesure d'il y a $(human_duration $((ts - q_ts)))"
+}
+
+cmd_history() {
+  local days
+  days=$(days_arg "${1:-}" 14) || exit 1
+  need_db
+  query "SELECT date(ts, 'unixepoch', 'localtime')   AS jour,
+                CAST(MAX(five_pct) AS INTEGER)        AS pic_5h,
+                CAST(MAX(seven_pct) AS INTEGER)       AS max_7j,
+                COUNT(DISTINCT session_id)            AS sessions,
+                printf('%.2f', SUM(cost_delta))       AS cout_usd
+         FROM deltas
+         WHERE ts >= $(now) - $days * 86400
+         GROUP BY jour ORDER BY jour DESC;"
+}
+
+cmd_report() {
+  local days since
+  days=$(days_arg "${1:-}" 7) || exit 1
+  need_db
+  since=$(( $(now) - days * 86400 ))
+  echo "Coût équivalent API sur $days jour(s)"
+  echo
+  echo "Par projet"
+  query "SELECT $PROJECT_NAME                    AS projet,
+                COUNT(DISTINCT session_id)       AS sessions,
+                printf('%.2f', SUM(cost_delta))  AS cout_usd
+         FROM deltas WHERE ts >= $since
+         GROUP BY project ORDER BY SUM(cost_delta) DESC;"
+  echo
+  echo "Par modèle"
+  query "SELECT COALESCE(NULLIF(model, ''), '?') AS modele,
+                COUNT(DISTINCT session_id)       AS sessions,
+                printf('%.2f', SUM(cost_delta))  AS cout_usd
+         FROM deltas WHERE ts >= $since
+         GROUP BY model ORDER BY SUM(cost_delta) DESC;"
+}
+
+cmd_doctor() {
+  local ok=0 c settings="$HOME/.claude/settings.json"
+  check() { # <libellé> <commande...>
+    local label=$1; shift
+    if "$@" >/dev/null 2>&1; then echo "  ok   $label"; else echo "  KO   $label"; ok=1; fi
+  }
+  echo "Dépendances"
+  for c in jq sqlite3 caffeinate osascript; do check "$c" command -v "$c"; done
+  echo "Installation"
+  check "lien ~/.claude/claude-watch" test -e "$HOME/.claude/claude-watch/statusline.sh"
+  check "hooks dans settings.json" grep -q 'claude-watch/hooks/awake.sh' "$settings"
+  check "status line dans settings.json" grep -q 'claude-watch/statusline.sh' "$settings"
+  check "base d'historique" test -f "$DB"
+  check "SwiftBar installé" test -d "/Applications/SwiftBar.app"
+  return $ok
+}
+
+cmd_paths() {
+  echo "repo    : $ROOT"
+  echo "état    : $STATE_DIR"
+  echo "base    : $DB"
+  echo "config  : $CLAUDE_WATCH_CONFIG"
+}
+
+case "${1:-}" in
+  status) cmd_status ;;
+  history) cmd_history "${2:-}" ;;
+  report) cmd_report "${2:-}" ;;
+  doctor) cmd_doctor ;;
+  paths) cmd_paths ;;
+  -h | --help | help | '') usage ;;
+  *) usage >&2; exit 1 ;;
+esac

@@ -1,0 +1,22 @@
+# Configuration optionnelle de claude-watch.
+# À copier dans ~/.config/claude-watch/config (fichier shell, sourcé par les scripts).
+
+# Durée maximale d'un caffeinate, en secondes. Sert de garde-fou si le hook Stop
+# ne se déclenche pas (interruption avec Échap, crash).
+#CLAUDE_WATCH_MAX_SECONDS=14400
+
+# Options de caffeinate. -i : pas de veille système. Ajouter -d pour garder
+# l'écran allumé, -s pour bloquer la veille sur secteur écran rabattu.
+#CLAUDE_WATCH_CAFFEINATE_FLAGS="-i"
+
+# Seuils d'alerte (% consommés), en ordre croissant.
+#CLAUDE_WATCH_THRESHOLDS="80 95"
+
+# Notifier la fin d'un tour d'agent plus long que N secondes (0 = jamais).
+#CLAUDE_WATCH_NOTIFY_AFTER=300
+
+# Intervalle minimal entre deux mesures en base pour une même session, en secondes.
+#CLAUDE_WATCH_LOG_INTERVAL=30
+
+# Écart, en points, entre % consommé et % de fenêtre écoulé avant d'afficher ▲ ou ▼.
+#CLAUDE_WATCH_PACE_MARGIN=10
