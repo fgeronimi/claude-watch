@@ -1,14 +1,43 @@
-# claude-watch
+<div align="center">
 
-Garde le Mac éveillé tant qu'un agent Claude Code travaille, et suit la consommation des quotas dans la barre de menus.
+# ☕ claude-watch
 
-- **Veille** : `caffeinate` démarre quand tu envoies un prompt et s'arrête quand l'agent a fini.
-- **Barre de menus** (SwiftBar) : nombre d'agents actifs, quotas 5 h et 7 jours, rythme de consommation.
-- **Status line** Claude Code : le même résumé, session par session.
-- **Historique** SQLite : coût par projet, par modèle et par jour.
-- **Alertes** macOS : passage de 80 % puis 95 % d'un quota, fin d'un tour d'agent de plus de 5 minutes.
+**Le Mac reste éveillé tant qu'un agent Claude Code travaille.<br>Les quotas se lisent d'un coup d'œil dans la barre de menus.**
 
-Aucun appel réseau : tout vient du JSON que Claude Code transmet à la status line.
+![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
+![bash 3.2+](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
+![SQLite](https://img.shields.io/badge/historique-SQLite-003B57?logo=sqlite&logoColor=white)
+![Aucun appel réseau](https://img.shields.io/badge/r%C3%A9seau-aucun%20appel-success)
+
+<img src="docs/apercu.svg" alt="La barre de menus affiche deux agents actifs et les quotas ; le terminal affiche la commande status et la status line" width="760">
+
+<sub>Illustration de l'affichage, avec des valeurs d'exemple.</sub>
+
+</div>
+
+## Pourquoi
+
+Un agent lancé pour vingt minutes s'arrête net si le Mac s'endort. Et rien ne dit, sans ouvrir `/usage`, si le quota tiendra jusqu'au reset. claude-watch règle les deux avec quelques scripts shell :
+
+| | |
+| --- | --- |
+| ☕ **Veille** | `caffeinate` démarre quand tu envoies un prompt et s'arrête quand l'agent a fini. |
+| 📊 **Barre de menus** | Agents actifs, quotas 5 h et 7 jours, rythme de consommation (via SwiftBar). |
+| ⌨️ **Status line** | Le même résumé dans Claude Code, session par session. |
+| 🗄️ **Historique** | Coût par projet, par modèle et par jour, dans une base SQLite locale. |
+| 🔔 **Alertes** | Notification à 80 % puis 95 % d'un quota, et à la fin d'un tour d'agent de plus de 5 minutes. |
+
+Aucun appel réseau, aucun jeton à fournir : tout vient du JSON que Claude Code transmet à la status line.
+
+## Sommaire
+
+- [Installation](#installation)
+- [Lecture de l'affichage](#lecture-de-laffichage)
+- [CLI](#cli)
+- [Configuration](#configuration)
+- [Fonctionnement](#fonctionnement)
+- [Limites](#limites)
+- [Tests](#tests)
 
 ## Installation
 
@@ -63,12 +92,28 @@ Optionnelle : copier `config.example` dans `~/.config/claude-watch/config`. On p
 
 ## Fonctionnement
 
+```mermaid
+flowchart LR
+    CC(["Claude Code"])
+    CC -- "UserPromptSubmit" --> H["hooks/awake.sh start"]
+    CC -- "Stop / SessionEnd" --> H2["hooks/awake.sh stop"]
+    CC -- "status line" --> SL["statusline.sh"]
+    H --> CAF[["caffeinate -i"]]
+    H2 -. "arrête" .-> CAF
+    H2 --> N["notification macOS"]
+    SL --> ETAT[("état + SQLite")]
+    SL --> N
+    ETAT --> SB["plugin SwiftBar"]
+    ETAT --> CLI["CLI claude-watch"]
 ```
-UserPromptSubmit ─► hooks/awake.sh start ─► caffeinate -i (pid dans l'état)
-Stop / SessionEnd ─► hooks/awake.sh stop|end ─► kill, notification
-status line ─► statusline.sh ─► fichier quota + historique SQLite + alertes
-SwiftBar (5 s) ─► swiftbar/claude-watch.5s.sh ─► lit l'état, n'écrit rien
-```
+
+| Fichier | Rôle |
+| --- | --- |
+| `hooks/awake.sh` | Lance et arrête `caffeinate`, notifie la fin des tours longs. |
+| `statusline.sh` | Affiche la status line, écrit les quotas et l'historique, déclenche les alertes. |
+| `swiftbar/claude-watch.5s.sh` | Plugin de barre de menus, rafraîchi toutes les 5 secondes. Il lit l'état et n'écrit rien. |
+| `bin/claude-watch` | CLI : état, historique, rapports, diagnostic. |
+| `lib/common.sh` | Fonctions partagées : état, base, calcul du rythme, notifications. |
 
 L'état vit dans `~/.local/state/claude-watch/` : un pid `caffeinate` par session, la dernière mesure de quota, la base `history.db`.
 
