@@ -12,36 +12,49 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 FONT_DIR = sys.argv[1] if len(sys.argv) > 1 else "/usr/share/fonts/opentype/inter"
-SCALE = 2          # rendu Retina
-CELL_H = 16 * SCALE  # hauteur de l'icône, en pixels
+SCALE = 2  # rendu Retina
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "glyphs.dat")
+
+# Jeux de caractères : préfixe, police, taille (pt), hauteur de cellule (pt), caractères.
+# Une cellule garde sa hauteur : tous les caractères d'un jeu partagent la même ligne de base.
+TEXT_SETS = [
+    ("t", "Inter-Medium.otf", 11, 16, "0123456789%–"),    # disposition large, et nombre d'agents
+    ("s", "Inter-SemiBold.otf", 8, 9, "0123456789%–"),    # disposition compacte
+]
+# Étiquettes dessinées dans les batteries, recadrées au plus juste.
+LABEL_SETS = [
+    ("L", "Inter-Bold.otf", 8.5, ("5H", "7J")),           # large
+    ("l", "Inter-Bold.otf", 6.5, ("5H", "7J")),           # compacte
+]
 
 
 def font(name, size_pt):
     return ImageFont.truetype(os.path.join(FONT_DIR, name), int(round(size_pt * SCALE)))
 
 
-def render(text, fnt, full_height):
-    """Masque alpha de `text`. full_height : garde la hauteur de la cellule (ligne de
-    base commune) ; sinon recadre aussi verticalement."""
-    img = Image.new("L", (CELL_H * 4, CELL_H), 0)
-    draw = ImageDraw.Draw(img)
-    # Ligne de base commune : hauteur de capitale centrée dans la cellule.
+def render(text, fnt, cell_h=None):
+    """Masque alpha de `text`. Avec cell_h (pixels) : cellule de cette hauteur, hauteur de
+    capitale centrée ; sans : recadré au plus juste."""
+    h = cell_h or 64
+    img = Image.new("L", (h * 6, h), 0)
     cap_top, cap_bottom = fnt.getbbox("H")[1], fnt.getbbox("H")[3]
-    y = (CELL_H - (cap_bottom - cap_top)) // 2 - cap_top
-    draw.text((CELL_H, y), text, font=fnt, fill=255)
+    y = (h - (cap_bottom - cap_top)) // 2 - cap_top
+    ImageDraw.Draw(img).text((h, y), text, font=fnt, fill=255)
     left, top, right, bottom = img.getbbox()
-    box = (left, 0, right, CELL_H) if full_height else (left, top, right, bottom)
-    return img.crop(box)
+    return img.crop((left, 0, right, h) if cell_h else (left, top, right, bottom))
 
 
 def main():
-    text_font = font("Inter-Medium.otf", 11)
-    label_font = font("Inter-Bold.otf", 8.5)
-    glyphs = [(c, render(c, text_font, True)) for c in "0123456789%"]
-    glyphs.append(("-", render("–", text_font, True)))
-    glyphs += [("L" + label, render(label, label_font, False)) for label in ("5H", "7J")]
+    glyphs = []
+    for prefix, name, size, cell, chars in TEXT_SETS:
+        fnt = font(name, size)
+        for c in chars:
+            glyphs.append((prefix + ("-" if c == "–" else c), render(c, fnt, cell * SCALE)))
+    for prefix, name, size, labels in LABEL_SETS:
+        fnt = font(name, size)
+        for label in labels:
+            glyphs.append((prefix + label, render(label, fnt)))
     with open(OUT, "w") as f:
         f.write("# Généré par tools/make_glyphs.py (police Inter, licence OFL). Ne pas éditer.\n")
         f.write("# nom largeur hauteur alpha(base64)\n")

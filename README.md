@@ -64,7 +64,7 @@ Pour désinstaller : `./uninstall.sh` (`--purge` supprime aussi l'historique).
 
 ### Barre de menus
 
-Le chiffre de gauche est le nombre d'agents Claude Code qui travaillent en ce moment (la veille est bloquée tant qu'il n'est pas à zéro). Suivent deux batteries, une par fenêtre de quota :
+Le chiffre de gauche est le nombre d'agents Claude Code qui travaillent en ce moment (la veille est bloquée tant qu'il n'est pas à zéro). Suivent deux batteries, une par fenêtre de quota, l'une au-dessus de l'autre pour rester étroit :
 
 | Élément | Sens |
 | --- | --- |
@@ -73,6 +73,8 @@ Le chiffre de gauche est le nombre d'agents Claude Code qui travaillent en ce mo
 | batterie `7J` | quota de la fenêtre de 7 jours |
 | pourcentage | ce qu'il **reste** du quota, comme pour une batterie |
 | rouge | il reste 20 % ou moins |
+
+L'icône fait environ 50 points de large. `CLAUDE_WATCH_BAR_STYLE=wide` met tout sur une ligne (environ 120 points), `text` remplace l'image par du texte.
 
 Le menu déroulant détaille chaque fenêtre avec une jauge de ce qui est **utilisé**, le temps avant le reset et, en sous-menu, le rythme et la projection :
 
@@ -116,7 +118,7 @@ La base se requête aussi directement : `sqlite3 ~/.local/state/claude-watch/his
 
 ## Configuration
 
-Optionnelle : copier `config.example` dans `~/.config/claude-watch/config`. On peut y régler la durée maximale de `caffeinate`, ses options, les seuils d'alerte, la marge du rythme, les couleurs de la status line et l'icône de la barre (seuil du rouge, thème, repli en texte).
+Optionnelle : copier `config.example` dans `~/.config/claude-watch/config`. On peut y régler la durée maximale de `caffeinate`, ses options, les seuils d'alerte, la marge du rythme, les couleurs de la status line et l'icône de la barre (disposition compacte ou large, seuil du rouge, thème, repli en texte).
 
 ## Fonctionnement
 
@@ -153,6 +155,7 @@ L'état vit dans `~/.local/state/claude-watch/` : un pid `caffeinate` par sessio
 - **Quotas** : disponibles seulement avec un abonnement Pro ou Max, et après la première réponse d'une session. Le quota hebdomadaire par modèle affiché par `/usage` n'est pas transmis à la status line.
 - **Fraîcheur** : la mesure ne bouge que lorsqu'une session Claude Code tourne. L'usage fait ailleurs (claude.ai, autre machine) n'apparaît qu'à la session suivante ; le menu indique l'âge de la mesure.
 - **Coûts** : c'est le coût équivalent API calculé par Claude Code, pas une facture. Il sert à comparer projets et modèles entre eux.
+- **Élément absent de la barre** : quand la barre de menus est pleine (MacBook à encoche, beaucoup d'icônes), macOS masque sans prévenir un élément trop large. C'est la raison du style compact par défaut ; avec `wide`, l'icône peut disparaître.
 - **Batterie rouge et thème** : tant que rien n'est rouge, l'icône prend d'elle-même la couleur de la barre. Avec du rouge, elle suit le mode clair ou sombre de macOS ; si le texte de ta barre est clair en mode clair (fond d'écran sombre), force `CLAUDE_WATCH_BAR_THEME=dark`.
 - **Écran rabattu sur batterie** : macOS met en veille malgré `caffeinate`. Il faut le secteur et un écran externe.
 - **Interruption avec Échap** : le hook `Stop` peut ne pas se déclencher. `caffeinate` s'arrête alors au prompt suivant, à la fin de la session ou après 4 h.

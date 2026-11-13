@@ -127,27 +127,40 @@ echo "Plugin SwiftBar"
 menu=$("$ROOT/swiftbar/claude-watch.5s.sh")
 title=$(echo "$menu" | head -1)
 assert "titre : image en couleurs quand une batterie est rouge" 'contains "$title" " | image=iVBORw0KGgo"'
-assert "titre : taille en points" 'contains "$title" " width=" && contains "$title" " height=16"'
-assert "image mise en cache" '[ "$(sed -n 1p "$T/state/bar.cache")" = "v2 0 4 37 light 20" ]'
-assert "thème sombre suivi" 'contains "$(OS_APPEARANCE=Dark "$ROOT/swiftbar/claude-watch.5s.sh" | head -1)" "image=" && [ "$(sed -n 1p "$T/state/bar.cache")" = "v2 0 4 37 dark 20" ]'
+assert "titre : taille en points" 'contains "$title" " width=" && contains "$title" " height=20"'
+assert "image mise en cache" '[ "$(sed -n 1p "$T/state/bar.cache")" = "v4 0 4 37 light 20 compact" ]'
+assert "thème sombre suivi" 'contains "$(OS_APPEARANCE=Dark "$ROOT/swiftbar/claude-watch.5s.sh" | head -1)" "image=" && [ "$(sed -n 1p "$T/state/bar.cache")" = "v4 0 4 37 dark 20 compact" ]'
 assert "jauges alignées" 'contains "$menu" "5 h  ▰▰▰▰▰▰▰▰▰▰   96 % utilisés" && contains "$menu" "7 j  ▰▰▰▰▰▰▱▱▱▱   63 % utilisés"'
 assert "jauge : arrondi et bornes" '[ "$(gauge 0)" = "▱▱▱▱▱▱▱▱▱▱" ] && [ "$(gauge 3)" = "▰▱▱▱▱▱▱▱▱▱" ] && [ "$(gauge 34)" = "▰▰▰▱▱▱▱▱▱▱" ] && [ "$(gauge 100)" = "▰▰▰▰▰▰▰▰▰▰" ]'
 assert "top projets" 'contains "$menu" "-- alpha : "'
 assert "lignes d'information cliquables (non grisées)" 'contains "$menu" "veille normale | refresh=true"'
 printf '%s 50 %s 70 %s\n' $((now - 20000)) $((now - 100)) $((now + 300000)) > "$T/state/quota"
 menu=$("$ROOT/swiftbar/claude-watch.5s.sh")
-assert "fenêtre 5 h expirée : batterie pleine" '[ "$(sed -n 1p "$T/state/bar.cache")" = "v2 0 100 30 template 20" ] && contains "$menu" "fenêtre réinitialisée"'
+assert "fenêtre 5 h expirée : batterie pleine" '[ "$(sed -n 1p "$T/state/bar.cache")" = "v4 0 100 30 template 20 compact" ] && contains "$menu" "fenêtre réinitialisée"'
 assert "titre : image template sans rouge" 'contains "$(echo "$menu" | head -1)" " | templateImage=iVBORw0KGgo"'
-assert "titre en texte sur demande" '[ "$(CLAUDE_WATCH_BAR_STYLE=text "$ROOT/swiftbar/claude-watch.5s.sh" | head -1)" = "0  5H 100%  7J 30%" ]'
+assert "titre en texte sur demande" '[ "$(CLAUDE_WATCH_BAR_STYLE=text "$ROOT/swiftbar/claude-watch.5s.sh" | head -1)" = "0  100%·30%" ]'
 rm -f "$T/state/quota"
-assert "sans mesure : batteries vides" '[ "$(CLAUDE_WATCH_BAR_STYLE=text "$ROOT/swiftbar/claude-watch.5s.sh" | head -1)" = "0  5H -  7J -" ]'
+assert "sans mesure : batteries vides" '[ "$(CLAUDE_WATCH_BAR_STYLE=text "$ROOT/swiftbar/claude-watch.5s.sh" | head -1)" = "0  -·-" ]'
+
+echo "Compatibilité bash 3.2 (macOS)"
+# En locale UTF-8, bash 3.2 lit "$var▰" comme une variable au nom prolongé par le début
+# du caractère : la sortie devient de l'UTF-8 invalide et SwiftBar masque le plugin.
+assert "aucune variable collée à un caractère non ASCII" '! grep -nP "\\\$[A-Za-z_][A-Za-z0-9_]*[^\\x00-\\x7F]" "$ROOT"/lib/*.sh "$ROOT"/hooks/*.sh "$ROOT"/statusline.sh "$ROOT"/swiftbar/*.sh "$ROOT"/bin/claude-watch "$ROOT"/install.sh "$ROOT"/uninstall.sh'
+status_json s1 alpha 3 34 61 | "$ROOT/statusline.sh" >/dev/null
+assert "sortie du menu en UTF-8 valide" '"$ROOT/swiftbar/claude-watch.5s.sh" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1'
+assert "sortie de la status line en UTF-8 valide" 'status_json s1 alpha 3 34 61 | CLAUDE_WATCH_COLOR=1 "$ROOT/statusline.sh" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1'
+assert "sortie de la CLI en UTF-8 valide" '"$ROOT/bin/claude-watch" status | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1'
 
 echo "Rendu de l'icône"
 png="$T/icone.png"
 "$ROOT/lib/render_bar.py" 2 66 39 dark | cut -d" " -f3 | base64 -d > "$png" 2>/dev/null
 assert "PNG valide" '[ "$(head -c 8 "$png" | od -An -c | tr -d " ")" = "211PNG\\r\\n032\\n" ]'
-assert "dimensions annoncées" '[ "$("$ROOT/lib/render_bar.py" 2 66 39 dark | cut -d" " -f1,2)" = "121 16" ]'
-assert "largeur adaptée au contenu" '[ "$("$ROOT/lib/render_bar.py" 12 100 100 template | cut -d" " -f1)" -gt 121 ]'
+assert "compact par défaut : deux lignes, étroit" '[ "$("$ROOT/lib/render_bar.py" 2 66 39 dark | cut -d" " -f1,2)" = "51 20" ]'
+assert "disposition large sur une ligne" '[ "$("$ROOT/lib/render_bar.py" 2 66 39 dark 20 wide | cut -d" " -f1,2)" = "121 16" ]'
+assert "compact : au plus 60 points même au plus large" '[ "$("$ROOT/lib/render_bar.py" 12 100 100 template | cut -d" " -f1)" -le 60 ]'
+assert "style wide transmis par le plugin" 'contains "$(CLAUDE_WATCH_BAR_STYLE=wide "$ROOT/swiftbar/claude-watch.5s.sh" | head -1)" " height=16"'
+assert "base64 sans = final, quel que soit le contenu" '! { for l in compact wide; do for a in 0 1 2 12; do for p in 0 7 33 66 100; do "$ROOT/lib/render_bar.py" $a $p $((100 - p)) dark 20 $l; done; done; done; } | grep -q "="'
+assert "titre non vide devant l'image" '[ "$("$ROOT/swiftbar/claude-watch.5s.sh" | head -1 | cut -d"|" -f1 | od -An -tx1 | tr -d " \\n")" = "e2808b200a" ]'
 assert "arguments invalides refusés" '! "$ROOT/lib/render_bar.py" 2 66 39 rose >/dev/null 2>&1'
 
 echo "Installation"

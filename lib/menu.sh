@@ -9,6 +9,25 @@ while [ -L "$src" ]; do
   case "$src" in /*) ;; *) src="$dir/$src" ;; esac
 done
 ROOT="$(cd -P "$(dirname "$src")/.." && pwd)"
+# --- DIAGNOSTIC TEMPORAIRE : sous SwiftBar, enregistre la sortie, les erreurs et
+# l'environnement dans .debug/ pour comprendre pourquoi l'élément ne s'affiche pas. ---
+if [ -n "${SWIFTBAR:-}" ] && [ -z "${CW_DEBUG_CHILD:-}" ]; then
+  d="$ROOT/.debug"
+  mkdir -p "$d"
+  CW_DEBUG_CHILD=1 /bin/bash "$ROOT/lib/menu.sh" > "$d/out" 2> "$d/err"
+  code=$?
+  {
+    echo "date=$(date '+%F %T') exit=$code"
+    echo "bash=$BASH_VERSION"
+    for v in PATH HOME LANG LC_ALL LC_CTYPE TMPDIR SHELL OS_APPEARANCE OS_VERSION_MAJOR SWIFTBAR SWIFTBAR_VERSION SWIFTBAR_BUILD SWIFTBAR_PLUGIN_PATH SWIFTBAR_PLUGIN_REFRESH_REASON; do
+      eval "echo \"$v=\${$v-<absent>}\""
+    done
+    echo "python3=$(command -v python3)"
+  } > "$d/env" 2>&1
+  cat "$d/out"
+  exit $code
+fi
+
 # shellcheck source=../lib/common.sh
 . "$ROOT/lib/common.sh"
 
@@ -22,9 +41,12 @@ active=$(active_count)
 # bar_title <% restant 5 h|-> <% restant 7 j|->
 # Titre de la barre de menus : nombre d'agents, puis deux batteries 5H et 7J avec le
 # pourcentage de quota restant. L'image est mise en cache tant que rien ne change.
+# Styles : compact (deux lignes, étroit), wide (une ligne), text (sans image).
+# Un élément trop large est masqué sans prévenir par macOS quand la barre est pleine.
 bar_title() {
   local five_left=$1 seven_left=$2 mode=template param=templateImage
-  local cache="$STATE_DIR/bar.cache" key out="" w h b64 v
+  local cache="$STATE_DIR/bar.cache" key out="" w h b64 v layout=compact
+  [ "$CLAUDE_WATCH_BAR_STYLE" = wide ] && layout=wide
 
   # Tant que rien n'est rouge, une image « template » prend d'elle-même la couleur
   # de la barre. Avec du rouge, il faut une image en couleurs, donc choisir un thème.
@@ -37,12 +59,12 @@ bar_title() {
     fi
   done
 
-  if [ "$CLAUDE_WATCH_BAR_STYLE" = battery ] && command -v python3 >/dev/null 2>&1; then
-    key="v2 $active $five_left $seven_left $mode $CLAUDE_WATCH_LOW"
+  if [ "$CLAUDE_WATCH_BAR_STYLE" != text ] && command -v python3 >/dev/null 2>&1; then
+    key="v4 $active $five_left $seven_left $mode $CLAUDE_WATCH_LOW $layout"
     if [ -f "$cache" ] && [ "$(sed -n 1p "$cache")" = "$key" ]; then
       out=$(sed -n 2p "$cache")
     else
-      out=$(python3 "$ROOT/lib/render_bar.py" "$active" "$five_left" "$seven_left" "$mode" "$CLAUDE_WATCH_LOW" 2>/dev/null) || out=""
+      out=$(python3 "$ROOT/lib/render_bar.py" "$active" "$five_left" "$seven_left" "$mode" "$CLAUDE_WATCH_LOW" "$layout" 2>/dev/null) || out=""
       if [ -n "$out" ]; then
         mkdir -p "$STATE_DIR"
         printf '%s\n%s\n' "$key" "$out" > "$cache.tmp.$$" && mv "$cache.tmp.$$" "$cache"
@@ -52,12 +74,13 @@ bar_title() {
 
   if [ -n "$out" ]; then
     read -r w h b64 <<<"$out"
-    echo " | $param=$b64 width=$w height=$h"
+    # Titre invisible (espace sans chasse) : un titre vide ferait passer l'élément pour absent.
+    printf '\342\200\213 | %s=%s width=%s height=%s\n' "$param" "$b64" "$w" "$h"
   else
     # Secours en texte : pas de python3, ou style « text » demandé.
     [ "$five_left" = "-" ] || five_left="$five_left%"
     [ "$seven_left" = "-" ] || seven_left="$seven_left%"
-    echo "$active  5H $five_left  7J $seven_left"
+    echo "$active  ${five_left}·${seven_left}"
   fi
 }
 
