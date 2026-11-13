@@ -9,25 +9,6 @@ while [ -L "$src" ]; do
   case "$src" in /*) ;; *) src="$dir/$src" ;; esac
 done
 ROOT="$(cd -P "$(dirname "$src")/.." && pwd)"
-# --- DIAGNOSTIC TEMPORAIRE : sous SwiftBar, enregistre la sortie, les erreurs et
-# l'environnement dans .debug/ pour comprendre pourquoi l'élément ne s'affiche pas. ---
-if [ -n "${SWIFTBAR:-}" ] && [ -z "${CW_DEBUG_CHILD:-}" ]; then
-  d="$ROOT/.debug"
-  mkdir -p "$d"
-  CW_DEBUG_CHILD=1 /bin/bash "$ROOT/lib/menu.sh" > "$d/out" 2> "$d/err"
-  code=$?
-  {
-    echo "date=$(date '+%F %T') exit=$code"
-    echo "bash=$BASH_VERSION"
-    for v in PATH HOME LANG LC_ALL LC_CTYPE TMPDIR SHELL OS_APPEARANCE OS_VERSION_MAJOR SWIFTBAR SWIFTBAR_VERSION SWIFTBAR_BUILD SWIFTBAR_PLUGIN_PATH SWIFTBAR_PLUGIN_REFRESH_REASON; do
-      eval "echo \"$v=\${$v-<absent>}\""
-    done
-    echo "python3=$(command -v python3)"
-  } > "$d/env" 2>&1
-  cat "$d/out"
-  exit $code
-fi
-
 # shellcheck source=../lib/common.sh
 . "$ROOT/lib/common.sh"
 
@@ -42,7 +23,6 @@ active=$(active_count)
 # Titre de la barre de menus : nombre d'agents, puis deux batteries 5H et 7J avec le
 # pourcentage de quota restant. L'image est mise en cache tant que rien ne change.
 # Styles : compact (deux lignes, étroit), wide (une ligne), text (sans image).
-# Un élément trop large est masqué sans prévenir par macOS quand la barre est pleine.
 bar_title() {
   local five_left=$1 seven_left=$2 mode=template param=templateImage
   local cache="$STATE_DIR/bar.cache" key out="" w h b64 v layout=compact

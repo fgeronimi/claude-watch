@@ -26,8 +26,6 @@
 
 # Barre de menus : "compact" (batteries sur deux lignes, environ 50 points de large),
 # "wide" (tout sur une ligne, environ 120 points) ou "text" (sans image).
-# Quand la barre est pleine, macOS masque sans prévenir un élément trop large :
-# garder "compact" sur un MacBook à encoche.
 #CLAUDE_WATCH_BAR_STYLE=compact
 
 # Pourcentage de quota restant sous lequel une batterie passe au rouge.

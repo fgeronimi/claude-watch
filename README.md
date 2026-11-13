@@ -155,7 +155,7 @@ L'état vit dans `~/.local/state/claude-watch/` : un pid `caffeinate` par sessio
 - **Quotas** : disponibles seulement avec un abonnement Pro ou Max, et après la première réponse d'une session. Le quota hebdomadaire par modèle affiché par `/usage` n'est pas transmis à la status line.
 - **Fraîcheur** : la mesure ne bouge que lorsqu'une session Claude Code tourne. L'usage fait ailleurs (claude.ai, autre machine) n'apparaît qu'à la session suivante ; le menu indique l'âge de la mesure.
 - **Coûts** : c'est le coût équivalent API calculé par Claude Code, pas une facture. Il sert à comparer projets et modèles entre eux.
-- **Élément absent de la barre** : quand la barre de menus est pleine (MacBook à encoche, beaucoup d'icônes), macOS masque sans prévenir un élément trop large. C'est la raison du style compact par défaut ; avec `wide`, l'icône peut disparaître.
+- **Élément absent de la barre** : SwiftBar masque un plugin dont la sortie n'est pas de l'UTF-8 valide, sans afficher d'erreur. Pour vérifier : `~/.claude/claude-watch/swiftbar/claude-watch.5s.sh | iconv -f UTF-8 -t UTF-8 > /dev/null && echo ok`.
 - **Batterie rouge et thème** : tant que rien n'est rouge, l'icône prend d'elle-même la couleur de la barre. Avec du rouge, elle suit le mode clair ou sombre de macOS ; si le texte de ta barre est clair en mode clair (fond d'écran sombre), force `CLAUDE_WATCH_BAR_THEME=dark`.
 - **Écran rabattu sur batterie** : macOS met en veille malgré `caffeinate`. Il faut le secteur et un écran externe.
 - **Interruption avec Échap** : le hook `Stop` peut ne pas se déclencher. `caffeinate` s'arrête alors au prompt suivant, à la fin de la session ou après 4 h.
@@ -168,3 +168,5 @@ L'état vit dans `~/.local/state/claude-watch/` : un pid `caffeinate` par sessio
 ```
 
 Les tests simulent `caffeinate` et les notifications, ils tournent aussi sous Linux (il faut `jq`, `sqlite3` et `python3`).
+
+Les scripts doivent rester compatibles avec le bash 3.2 de macOS. Un piège à connaître : en locale UTF-8, il lit mal une variable collée à un caractère non ASCII (`"$out▰"`) et produit de l'UTF-8 invalide ; il faut des accolades (`"${out}▰"`). Les tests refusent cette écriture et vérifient que les sorties sont de l'UTF-8 valide.
